@@ -40,6 +40,9 @@ import com.google.android.gms.tasks.Task;
 public class MapsActivityCurrentPlace extends AppCompatActivity
         implements OnMapReadyCallback {
 
+    //test commit
+    private int commit ;
+
     private static final String TAG = MapsActivityCurrentPlace.class.getSimpleName();
     private GoogleMap mMap;
     private CameraPosition mCameraPosition;
