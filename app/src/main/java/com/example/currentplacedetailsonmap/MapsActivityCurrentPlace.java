@@ -7,15 +7,23 @@ import android.os.Bundle;
 import android.support.annotation.NonNull;
 import android.support.v4.app.ActivityCompat;
 import android.support.v4.content.ContextCompat;
+import android.support.v4.view.ViewPager;
 import android.support.v7.app.AlertDialog;
 import android.support.v7.app.AppCompatActivity;
 import android.util.Log;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
+import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.TextView;
+import android.widget.Toast;
 
+import com.directions.route.AbstractRouting;
+import com.directions.route.Route;
+import com.directions.route.RouteException;
+import com.directions.route.Routing;
+import com.directions.route.RoutingListener;
 import com.google.android.gms.location.FusedLocationProviderClient;
 import com.google.android.gms.location.LocationServices;
 import com.google.android.gms.location.places.GeoDataClient;
@@ -27,18 +35,28 @@ import com.google.android.gms.maps.CameraUpdateFactory;
 import com.google.android.gms.maps.GoogleMap;
 import com.google.android.gms.maps.OnMapReadyCallback;
 import com.google.android.gms.maps.SupportMapFragment;
+import com.google.android.gms.maps.model.BitmapDescriptorFactory;
 import com.google.android.gms.maps.model.CameraPosition;
 import com.google.android.gms.maps.model.LatLng;
 import com.google.android.gms.maps.model.Marker;
 import com.google.android.gms.maps.model.MarkerOptions;
+import com.google.android.gms.maps.model.Polyline;
+import com.google.android.gms.maps.model.PolylineOptions;
 import com.google.android.gms.tasks.OnCompleteListener;
 import com.google.android.gms.tasks.Task;
+
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * An activity that displays a map showing the place at the device's current location.
  */
+
+/*
+https://github.com/googlemaps/android-samples/tree/master/tutorials/CurrentPlaceDetailsOnMap
+ */
 public class MapsActivityCurrentPlace extends AppCompatActivity
-        implements OnMapReadyCallback {
+        implements OnMapReadyCallback , RoutingListener {
 
     //test commit
     private int commit ;
@@ -50,6 +68,7 @@ public class MapsActivityCurrentPlace extends AppCompatActivity
     // The entry points to the Places API.
     private GeoDataClient mGeoDataClient;
     private PlaceDetectionClient mPlaceDetectionClient;
+
 
     // The entry point to the Fused Location Provider.
     private FusedLocationProviderClient mFusedLocationProviderClient;
@@ -76,6 +95,15 @@ public class MapsActivityCurrentPlace extends AppCompatActivity
     private String[] mLikelyPlaceAttributions;
     private LatLng[] mLikelyPlaceLatLngs;
 
+    private  LatLng destin;
+
+    //Make a route
+    private List<Polyline> polylines;
+    private static final int[] COLORS = new int[]{R.color.primary_dark_material_light};
+
+    //Choose a place
+    private EditText search;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -98,11 +126,42 @@ public class MapsActivityCurrentPlace extends AppCompatActivity
         // Construct a FusedLocationProviderClient.
         mFusedLocationProviderClient = LocationServices.getFusedLocationProviderClient(this);
 
+        //For route
+        destin = new LatLng(50.856929, 4.320384);
+        getRouteToMarker(destin);
+
+        //initialize polylines
+        polylines = new ArrayList<>();
+
+        //set search
+        search = (EditText) findViewById(R.id.input_search);
+
+
         // Build the map.
         SupportMapFragment mapFragment = (SupportMapFragment) getSupportFragmentManager()
                 .findFragmentById(R.id.map);
         mapFragment.getMapAsync(this);
 
+
+    }
+
+    private void setupViewPager(ViewPager viewPager) {
+        SectionsPageAdapter adapter = new SectionsPageAdapter(getSupportFragmentManager());
+        adapter.addFragment(new DetailFragment(), "TAB1");
+        adapter.addFragment(new UsersFragment(), "TAB2");
+     //   adapter.addFragment(new Tab3Fragment(), "TAB3");
+        viewPager.setAdapter(adapter);
+    }
+
+
+    private void getRouteToMarker(LatLng destin) {
+        Routing routing = new Routing.Builder()
+                .travelMode(AbstractRouting.TravelMode.DRIVING)
+                .withListener(this)
+                .waypoints(new LatLng(0,0),destin)
+                .key("AIzaSyA9yn3Iv06_evMQ7J84Turano_SUbgqkcA")
+                .build();
+        routing.execute();
     }
 
     /**
@@ -151,6 +210,12 @@ public class MapsActivityCurrentPlace extends AppCompatActivity
 
         // Use a custom info window adapter to handle multiple lines of text in the
         // info window contents.
+
+        LatLng sydney = new LatLng(-50.856929, 4.320384);
+        map.addMarker(new MarkerOptions().position(sydney)
+                .title("Marker in Colruyt"));
+        map.moveCamera(CameraUpdateFactory.newLatLng(sydney));
+
         mMap.setInfoWindowAdapter(new GoogleMap.InfoWindowAdapter() {
 
             @Override
@@ -394,5 +459,68 @@ public class MapsActivityCurrentPlace extends AppCompatActivity
         } catch (SecurityException e)  {
             Log.e("Exception: %s", e.getMessage());
         }
+    }
+
+    @Override
+    public void onRoutingFailure(RouteException e) {
+
+        if(e != null) {
+            Toast.makeText(this, "Error: " + e.getMessage(), Toast.LENGTH_LONG).show();
+        }else {
+            Toast.makeText(this, "Something went wrong, Try again", Toast.LENGTH_SHORT).show();
+        }
+
+    }
+
+    @Override
+    public void onRoutingStart() {
+
+    }
+
+    @Override
+    public void onRoutingSuccess(ArrayList<Route> route, int shortestRouteIndex) {
+
+        polylines = new ArrayList<>();
+        //add route(s) to the map.
+        for (int i = 0; i <route.size(); i++) {
+
+            //In case of more than 5 alternative routes
+            int colorIndex = i % COLORS.length;
+
+            PolylineOptions polyOptions = new PolylineOptions();
+            polyOptions.color(getResources().getColor(COLORS[colorIndex]));
+            polyOptions.width(10 + i * 3);
+            polyOptions.addAll(route.get(i).getPoints());
+            Polyline polyline = mMap.addPolyline(polyOptions);
+            polylines.add(polyline);
+
+            Toast.makeText(getApplicationContext(),"Route "+ (i+1) +": distance - "+ route.get(i).getDistanceValue()+": duration - "+ route.get(i).getDurationValue(),Toast.LENGTH_SHORT).show();
+        }
+
+        // Start marker
+        MarkerOptions options = new MarkerOptions();
+        options.position(new LatLng(mLastKnownLocation.getLatitude(),mLastKnownLocation.getLongitude()));
+
+        mMap.addMarker(options);
+
+        // End marker
+        options = new MarkerOptions();
+        options.position(destin);
+        mMap.addMarker(options);
+
+
+    }
+
+    @Override
+    public void onRoutingCancelled() {
+
+    }
+
+    private void erasePolylines(){
+        for (Polyline line : polylines){
+            line.remove();
+        }
+
+        polylines.clear();
     }
 }
